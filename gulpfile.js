@@ -9,12 +9,16 @@ plumber         = require('gulp-plumber'),
 yaml            = require('gulp-yaml'),
 flatten         = require('gulp-flatten'),
 intercept       = require('gulp-intercept'),
+imagemin        = require('gulp-imagemin'),
+cssmin          = require('gulp-cssmin'),
+uglify          = require('gulp-uglify'),
 bs              = require('browser-sync').create(),
 minimist        = require('minimist'),
 File            = require('vinyl'),
 es              = require('event-stream'),
 fs              = require('fs'),
 md5             = require('md5'),
+del             = require('del'),
 packagejson     = require('./package.json')
 ;
 
@@ -160,36 +164,59 @@ function generateVinyl(basePath, dataPath, fPrefix, fSuffix, dSuffix) {
 
 // define gulp tasks ///////////////////////////////////
 
-gulp.task('sass', function() {
+gulp.task('libCss', ['clean-libCss'], function() {
+  return gulp.src(options.libraryPath + 'css/**/*')
+  .pipe(plumber())
+  .pipe(gulp.dest('public/css/lib'));
+});
+
+gulp.task('sass', ['clean-css'], function() {
   return gulp.src('source/sass/styles.scss')
   .pipe(sass().on('error', sass.logError))
   .pipe(gulp.dest('public/css'))
   .pipe(cliOptions.nosync ? bs.stream() : util.noop());
 });
 
-gulp.task('libCss', function() {
-  return gulp.src(options.libraryPath + 'css/**/*')
-  .pipe(plumber())
-  .pipe(gulp.dest('source/css/lib'))
-  .pipe(gulp.dest('public/css/lib'));
+gulp.task('sassOpt', ['clean-css'], function() {
+  return gulp.src('source/sass/styles.scss')
+  .pipe(sass().on('error', sass.logError))
+  .pipe(cssmin())
+  .pipe(gulp.dest('public/css'))
+  .pipe(cliOptions.nosync ? bs.stream() : util.noop());
 });
 
-gulp.task('libJs', function() {
+gulp.task('libJs', ['clean-libJs'], function() {
   return gulp.src(options.libraryPath + 'js/**/*')
   .pipe(plumber())
-  .pipe(gulp.dest('source/js/lib'));
+  .pipe(gulp.dest('public/js/lib'));
 });
 
-gulp.task('js', ['libJs'], function() {
-  return gulp.src('source/js/**/*')
+gulp.task('js', ['clean-js'], function() {
+  return gulp.src('source/js/*.js')
   .pipe(plumber())
   .pipe(gulp.dest('public/js'))
   .pipe(cliOptions.nosync ? bs.stream() : util.noop());
 });
 
-gulp.task('img', function() {
+gulp.task('jsOpt', ['clean-js'], function() {
+  return gulp.src('source/js/*.js')
+  .pipe(plumber())
+  .pipe(uglify())
+  .pipe(gulp.dest('public/js'))
+  .pipe(cliOptions.nosync ? bs.stream() : util.noop());
+});
+
+gulp.task('img', ['clean-img'], function() {
   return gulp.src('source/img/**/*')
   .pipe(plumber())
+  .pipe(gulp.dest('public/img'))
+  .pipe(cliOptions.nosync ? bs.stream() : util.noop());
+});
+
+gulp.task('imgOpt', ['clean-img'], function() {
+  return gulp.src('source/img/**/*')
+  .pipe(plumber())
+  .pipe(imagemin({progressive: true}))
   .pipe(gulp.dest('public/img'))
   .pipe(cliOptions.nosync ? bs.stream() : util.noop());
 });
@@ -265,7 +292,27 @@ gulp.task('nunjucks', ['generateTemplates'], function() {
   .pipe(gulp.dest('public'));
 });
 
-var buildTasks = ['sass', 'js', 'img', 'nunjucks', 'libCss'];
+gulp.task('clean-css', function() {
+  return del('public/css/*.css');
+});
+
+gulp.task('clean-libCss', function() {
+  return del('public/css/lib/*');
+});
+
+gulp.task('clean-js', function() {
+  return del('public/js/*.js');
+});
+
+gulp.task('clean-libJs', function() {
+  return del('public/js/lib/*');
+});
+
+gulp.task('clean-img', function() {
+  return del('public/img/*');
+});
+
+var buildTasks = ['sassOpt', 'jsOpt', 'imgOpt', 'nunjucks', 'libCss', 'libJs'];
 gulp.task('build', buildTasks, function () {
   util.log(util.colors.magenta('****'), 'Running build tasks:', buildTasks, util.colors.magenta('****'));
 })
@@ -275,7 +322,7 @@ gulp.task('deploy', ['build'], shell.task([
   ])
 );
 
-gulp.task('default', ['bs', 'build'], function (){
+gulp.task('default', ['bs', 'sass', 'js', 'img', 'nunjucks', 'libCss', 'libJs'], function() {
   gulp.watch('source/sass/**/*.scss', ['sass']);
   gulp.watch('source/templates/**/*.html', ['nunjucks']);
   gulp.watch('source/img/**/*', ['img']);
